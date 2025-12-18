@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"flag"
@@ -22,6 +23,8 @@ import (
 
 type Config struct {
 	Url               string   `yaml:"url"`
+	InsecureTls       bool     `yaml:"insecure_tls"`
+	HttpTimeoutSec    int      `yaml:"http_timeout_sec"`
 	AuthHeader        string   `yaml:"auth_header"`
 	AuthToken         string   `yaml:"auth_token"`
 	HttpMethod        string   `yaml:"http_method"`
@@ -32,18 +35,18 @@ type Config struct {
 }
 
 var ErrHttpPageExpired = errors.New("419: page expired")
+var Conf Config
 
-func loadConfig(configPath string) Config {
+func loadConfig(configPath string) {
 	yamlFile, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatalf("yamlFile.Get err   #%v ", err)
 	}
-	var conf Config
-	err = yaml.Unmarshal(yamlFile, &conf)
+
+	err = yaml.Unmarshal(yamlFile, &Conf)
 	if err != nil {
 		log.Fatalf("Unmarshal: %v", err)
 	}
-	return conf
 }
 
 func httpRequest(method string, url string, authHeader string, token string) (string, error) {
@@ -54,7 +57,13 @@ func httpRequest(method string, url string, authHeader string, token string) (st
 	req.Header.Set(authHeader, token)
 	req.Header.Set("User-Agent", "NucUnlocker 1.0")
 
-	client := &http.Client{}
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: Conf.InsecureTls},
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   time.Duration(Conf.HttpTimeoutSec) * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -174,12 +183,12 @@ see the repo nucunlocker.yml for the config format
 	switch *mode {
 	case "unlock": // default mode
 		log.Println("Unlocking NUC 🤖")
-		conf := loadConfig(*configPath)
+		loadConfig(*configPath)
 		// make api call
 		var response string
 		var err error
 		for {
-			response, err = httpRequest(conf.HttpMethod, conf.Url, conf.AuthHeader, conf.AuthToken)
+			response, err = httpRequest(Conf.HttpMethod, Conf.Url, Conf.AuthHeader, Conf.AuthToken)
 			if err != nil {
 				if err == ErrHttpPageExpired && *retry {
 					log.Printf("Warning: %v, retry enabled ...", err)
@@ -199,7 +208,7 @@ see the repo nucunlocker.yml for the config format
 		if err != nil {
 			log.Fatal(err)
 		}
-		plaintextbyte, err := Decrypt([]byte(conf.PayloadPassword), ciphertextbyte)
+		plaintextbyte, err := Decrypt([]byte(Conf.PayloadPassword), ciphertextbyte)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -207,13 +216,13 @@ see the repo nucunlocker.yml for the config format
 		log.Println("Payload decrypted ✅")
 
 		// execute output command
-		updatedArgs := make([]string, len(conf.UnlockArgs))
-		copy(updatedArgs, conf.UnlockArgs)
+		updatedArgs := make([]string, len(Conf.UnlockArgs))
+		copy(updatedArgs, Conf.UnlockArgs)
 		for i, arg := range updatedArgs {
-			updatedArgs[i] = strings.ReplaceAll(arg, conf.UnlockPlaceholder, secret)
+			updatedArgs[i] = strings.ReplaceAll(arg, Conf.UnlockPlaceholder, secret)
 		}
 		log.Println("Command prepared ✅")
-		cmd := exec.Command(conf.UnlockCmd, updatedArgs...)
+		cmd := exec.Command(Conf.UnlockCmd, updatedArgs...)
 		cmd.Env = os.Environ()
 		output, errr := cmd.CombinedOutput()
 		if errr != nil {
