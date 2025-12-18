@@ -225,6 +225,9 @@ see the repo nucunlocker.yml for the config format
 	case "encrypt":
 		// Helper to create encrypted payload (small payload as it fit in argument lines)
 		fmt.Println("Encrypting clear text")
+		if len(*password) < 1 {
+			log.Fatal("Password len can't be zero")
+		}
 		ciphertextbyte, err := Encrypt([]byte(*password), []byte(*data))
 		if err != nil {
 			log.Fatal(err)
@@ -234,6 +237,9 @@ see the repo nucunlocker.yml for the config format
 	case "decrypt":
 		// Helper to verify your payload
 		fmt.Println("Decrypting cipher text")
+		if len(*password) < 1 {
+			log.Fatal("Password len can't be zero")
+		}
 		ciphertextbyte, err := base64.StdEncoding.DecodeString(*data)
 		if err != nil {
 			log.Fatal(err)
