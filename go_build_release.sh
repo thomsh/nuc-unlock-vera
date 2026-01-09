@@ -12,7 +12,8 @@ do
             file_ext=".exe"
         fi
         output_name="nucunlocker-${supported_os}-${supported_arch}${file_ext}"
-        GOOS="$supported_os" GOARCH="$supported_arch" go build -o "release/$output_name" main.go
+        # Static build, CGO_ENABLED=0
+        CGO_ENABLED=0 GOOS="$supported_os" GOARCH="$supported_arch" go build -o "release/$output_name" main.go
     done
 done
 pushd release
